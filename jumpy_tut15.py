@@ -11,7 +11,7 @@ mixer.init()
 pygame.init()
 
 #game window dimensions
-SCREEN_WIDTH = 400
+SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
 
 #create game window
@@ -20,7 +20,7 @@ pygame.display.set_caption('Jumpy')
 
 #set frame rate
 clock = pygame.time.Clock()
-FPS = 60
+FPS = 50
 
 #load music and sounds
 pygame.mixer.music.load('assets/music.mp3')
@@ -41,6 +41,8 @@ bg_scroll = 0
 game_over = False
 score = 0
 fade_counter = 0
+trivia_answered_correctly = False  # Add this line
+
 
 if os.path.exists('score.txt'):
 	with open('score.txt', 'r') as file:
@@ -59,11 +61,13 @@ font_big = pygame.font.SysFont('Lucida Sans', 24)
 
 #load images
 jumpy_image = pygame.image.load('assets/jump.png').convert_alpha()
-bg_image = pygame.image.load('assets/bg.png').convert_alpha()
+bg_image = pygame.image.load('assets/salt_flats_slc.jpeg').convert_alpha()
 platform_image = pygame.image.load('assets/wood.png').convert_alpha()
 #bird spritesheet
-bird_sheet_img = pygame.image.load('assets/bird.png').convert_alpha()
-bird_sheet = SpriteSheet(bird_sheet_img)
+bird_sheet_img = pygame.image.load('assets/Bug_In_Code.png').convert_alpha()
+# bird_sheet = SpriteSheet(bird_sheet_img)
+# Scale the image if needed
+bird_sheet_img = pygame.transform.scale(bird_sheet_img, (50, 50))  # Adjust the size as needed
 
 
 #function for outputting text onto the screen
@@ -82,73 +86,82 @@ def draw_panel():
 def draw_bg(bg_scroll):
 	screen.blit(bg_image, (0, 0 + bg_scroll))
 	screen.blit(bg_image, (0, -600 + bg_scroll))
-
-#player class
 class Player():
-	def __init__(self, x, y):
-		self.image = pygame.transform.scale(jumpy_image, (45, 45))
-		self.width = 25
-		self.height = 40
-		self.rect = pygame.Rect(0, 0, self.width, self.height)
-		self.rect.center = (x, y)
-		self.vel_y = 0
-		self.flip = False
+    def __init__(self, x, y):
+        self.image = pygame.transform.scale(jumpy_image, (45, 45))
+        self.width = 25
+        self.height = 40
+        self.rect = pygame.Rect(0, 0, self.width, self.height)
+        self.rect.center = (x, y)
+        self.vel_y = 0
+        self.flip = False
+        self.is_jumping = False
 
-	def move(self):
-		#reset variables
-		scroll = 0
-		dx = 0
-		dy = 0
+    def jump(self):
+        if not self.is_jumping:
+            self.vel_y = -30
+            self.is_jumping = True
+            jump_fx.play()
 
-		#process keypresses
-		key = pygame.key.get_pressed()
-		if key[pygame.K_a]:
-			dx = -10
-			self.flip = True
-		if key[pygame.K_d]:
-			dx = 10
-			self.flip = False
+    def move(self):
+        # reset variables
+        scroll = 0
+        dx = 0
+        dy = 0
 
-		#gravity
-		self.vel_y += GRAVITY
-		dy += self.vel_y
+        # process keypresses
+        key = pygame.key.get_pressed()
+        if key[pygame.K_LEFT]:
+            dx = -5
+            self.flip = True
+        if key[pygame.K_RIGHT]:
+            dx = 5
+            self.flip = False
 
-		#ensure player doesn't go off the edge of the screen
-		if self.rect.left + dx < 0:
-			dx = -self.rect.left
-		if self.rect.right + dx > SCREEN_WIDTH:
-			dx = SCREEN_WIDTH - self.rect.right
+        # gravity
+        self.vel_y += GRAVITY
+        dy += self.vel_y
 
+        # ensure player doesn't go off the edge of the screen
+        if self.rect.left + dx < 0:
+            dx = -self.rect.left
+        if self.rect.right + dx > SCREEN_WIDTH:
+            dx = SCREEN_WIDTH - self.rect.right
 
-		#check collision with platforms
-		for platform in platform_group:
-			#collision in the y direction
-			if platform.rect.colliderect(self.rect.x, self.rect.y + dy, self.width, self.height):
-				#check if above the platform
-				if self.rect.bottom < platform.rect.centery:
-					if self.vel_y > 0:
-						self.rect.bottom = platform.rect.top
-						dy = 0
-						self.vel_y = -20
-						jump_fx.play()
+        # check collision with platforms
+        on_platform = False
+        for platform in platform_group:
+            # collision in the y direction
+            if platform.rect.colliderect(self.rect.x, self.rect.y + dy, self.width, self.height):
+                # check if above the platform
+                if self.rect.bottom <= platform.rect.top and dy > 0:
+                    self.rect.bottom = platform.rect.top
+                    dy = 0
+                    self.vel_y = 0
+                    on_platform = True
+        
 
-		#check if the player has bounced to the top of the screen
-		if self.rect.top <= SCROLL_THRESH:
-			#if player is jumping
-			if self.vel_y < 0:
-				scroll = -dy
+        # check if the player has bounced to the top of the screen
+        if self.rect.top <= SCROLL_THRESH:
+            # if player is jumping
+            if self.vel_y < 0:
+                scroll = -dy
 
-		#update rectangle position
-		self.rect.x += dx
-		self.rect.y += dy + scroll
+        # update rectangle position
+        self.rect.x += dx
+        self.rect.y += dy + scroll
 
-		#update mask
-		self.mask = pygame.mask.from_surface(self.image)
+        # update mask
+        self.mask = pygame.mask.from_surface(self.image)
 
-		return scroll
+        # set jumping status based on whether player is on a platform
+        if on_platform:
+            self.is_jumping = False
 
-	def draw(self):
-		screen.blit(pygame.transform.flip(self.image, self.flip, False), (self.rect.x - 12, self.rect.y - 5))
+        return scroll
+
+    def draw(self):
+        screen.blit(pygame.transform.flip(self.image, self.flip, False), (self.rect.x - 12, self.rect.y - 5))
 
 #platform class
 class Platform(pygame.sprite.Sprite):
@@ -189,121 +202,196 @@ platform_group = pygame.sprite.Group()
 enemy_group = pygame.sprite.Group()
 
 #create starting platform
-platform = Platform(SCREEN_WIDTH // 2 - 50, SCREEN_HEIGHT - 50, 100, False)
+platform = Platform(SCREEN_WIDTH // 2 - 50, SCREEN_HEIGHT - 10, 400, False)
 platform_group.add(platform)
+# trivia_questions = [
+#     {"question": "What is the capital of France?", "answer": "Paris"}
+#     # Add more questions as needed
+# ]
 
-#game loop
+trivia_question = {"question": "What is the capital of France?", "answer": "Paris"}
+
+def display_trivia(screen, font):
+    user_answer = ""
+    question_surface = font.render(trivia_question["question"], True, (255, 255, 255))
+    question_rect = question_surface.get_rect(center=(screen.get_width() // 2, screen.get_height() // 3))
+
+    answer_prompt = font.render("Your answer: ", True, (255, 255, 255))
+    answer_rect = answer_prompt.get_rect(topleft=(screen.get_width() // 4, screen.get_height() // 2))
+
+    input_active = True
+
+    while input_active:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    input_active = False
+                elif event.key == pygame.K_BACKSPACE:
+                    user_answer = user_answer[:-1]
+                else:
+                    user_answer += event.unicode
+
+        screen.fill((0, 0, 0))  # Clear the screen
+
+        screen.blit(question_surface, question_rect)
+        screen.blit(answer_prompt, answer_rect)
+
+        user_answer_surface = font.render(user_answer, True, (255, 255, 255))
+        user_answer_rect = user_answer_surface.get_rect(topleft=(answer_rect.right + 10, screen.get_height() // 2))
+        screen.blit(user_answer_surface, user_answer_rect)
+
+        pygame.display.flip()
+
+    if user_answer.strip().lower() == trivia_question["answer"].lower():
+        print("Correct!")
+        return True
+    else:
+        print(f"Wrong! The correct answer was {trivia_question['answer']}.")
+        return False
+
+
+# game loop
 run = True
 while run:
+    clock.tick(FPS)
 
-	clock.tick(FPS)
+    if not game_over:
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_UP]:
+            jumpy.jump()
 
-	if game_over == False:
-		scroll = jumpy.move()
+        scroll = jumpy.move()
 
-		#draw background
-		bg_scroll += scroll
-		if bg_scroll >= 600:
-			bg_scroll = 0
-		draw_bg(bg_scroll)
+        # draw background
+        bg_scroll += scroll
+        if bg_scroll >= 600:
+            bg_scroll = 0
+        draw_bg(bg_scroll)
 
-		#generate platforms
-		if len(platform_group) < MAX_PLATFORMS:
-			p_w = random.randint(40, 60)
-			p_x = random.randint(0, SCREEN_WIDTH - p_w)
-			p_y = platform.rect.y - random.randint(80, 120)
-			p_type = random.randint(1, 2)
-			if p_type == 1 and score > 500:
-				p_moving = True
-			else:
-				p_moving = False
-			platform = Platform(p_x, p_y, p_w, p_moving)
-			platform_group.add(platform)
-
-		#update platforms
-		platform_group.update(scroll)
-
-		#generate enemies
-		if len(enemy_group) == 0 and score > 1500:
-			enemy = Enemy(SCREEN_WIDTH, 100, bird_sheet, 1.5)
-			enemy_group.add(enemy)
-
-		#update enemies
-		enemy_group.update(scroll, SCREEN_WIDTH)
-
-		#update score
-		if scroll > 0:
-			score += scroll
-
-		#draw line at previous high score
-		pygame.draw.line(screen, WHITE, (0, score - high_score + SCROLL_THRESH), (SCREEN_WIDTH, score - high_score + SCROLL_THRESH), 3)
-		draw_text('HIGH SCORE', font_small, WHITE, SCREEN_WIDTH - 130, score - high_score + SCROLL_THRESH)
-
-		#draw sprites
-		platform_group.draw(screen)
-		enemy_group.draw(screen)
-		jumpy.draw()
-
-		#draw panel
-		draw_panel()
-
-		#check game over
-		if jumpy.rect.top > SCREEN_HEIGHT:
-			game_over = True
-			death_fx.play()
-		#check for collision with enemies
-		if pygame.sprite.spritecollide(jumpy, enemy_group, False):
-			if pygame.sprite.spritecollide(jumpy, enemy_group, False, pygame.sprite.collide_mask):
-				game_over = True
-				death_fx.play()
-	else:
-		if fade_counter < SCREEN_WIDTH:
-			fade_counter += 5
-			for y in range(0, 6, 2):
-				pygame.draw.rect(screen, BLACK, (0, y * 100, fade_counter, 100))
-				pygame.draw.rect(screen, BLACK, (SCREEN_WIDTH - fade_counter, (y + 1) * 100, SCREEN_WIDTH, 100))
-		else:
-			draw_text('GAME OVER!', font_big, WHITE, 130, 200)
-			draw_text('SCORE: ' + str(score), font_big, WHITE, 130, 250)
-			draw_text('PRESS SPACE TO PLAY AGAIN', font_big, WHITE, 40, 300)
-			#update high score
-			if score > high_score:
-				high_score = score
-				with open('score.txt', 'w') as file:
-					file.write(str(high_score))
-			key = pygame.key.get_pressed()
-			if key[pygame.K_SPACE]:
-				#reset variables
-				game_over = False
-				score = 0
-				scroll = 0
-				fade_counter = 0
-				#reposition jumpy
-				jumpy.rect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT - 150)
-				#reset enemies
-				enemy_group.empty()
-				#reset platforms
-				platform_group.empty()
-				#create starting platform
-				platform = Platform(SCREEN_WIDTH // 2 - 50, SCREEN_HEIGHT - 50, 100, False)
-				platform_group.add(platform)
+        # generate platforms
+        # if len(platform_group) < MAX_PLATFORMS:
+        #     p_w = random.randint(40, 60)
+        #     p_x = random.randint(0, SCREEN_WIDTH - p_w)
+        #     p_y = platform.rect.y - random.randint(80, 120)
+        #     p_type = random.randint(1, 2)
+        #     if p_type == 1 and score > 200:
+        #         p_moving = True
+        #     else:
+        #         p_moving = False
+        #     platform = Platform(p_x, p_y, p_w, p_moving)
+        #     platform_group.add(platform)
+        if len(platform_group) < MAX_PLATFORMS:
+            p_w = random.randint(100, 150)  # Adjust these values to control the range of platform widths
+            p_x = random.randint(0, SCREEN_WIDTH - p_w)
+            p_y = platform.rect.y - random.randint(80, 120)
+            p_type = random.randint(1, 2)
+            if p_type == 1 and score > 200:
+                p_moving = True
+            else:
+                p_moving = False
+            platform = Platform(p_x, p_y, p_w, p_moving)
+            platform_group.add(platform)
 
 
-	#event handler
-	for event in pygame.event.get():
-		if event.type == pygame.QUIT:
-			#update high score
-			if score > high_score:
-				high_score = score
-				with open('score.txt', 'w') as file:
-					file.write(str(high_score))
-			run = False
+        # update platforms
+        platform_group.update(scroll)
 
+        # generate enemies
+        if len(enemy_group) == 0 and score > 400:
+            enemy = Enemy(SCREEN_WIDTH, 100, bird_sheet_img, 1.5)
+            enemy_group.add(enemy)
 
-	#update display window
-	pygame.display.update()
+        # update enemies
+        enemy_group.update(scroll, SCREEN_WIDTH)
 
+        # update score
+        if scroll > 0:
+            score += scroll
 
+        # draw line at previous high score
+        pygame.draw.line(screen, WHITE, (0, score - high_score + SCROLL_THRESH), (SCREEN_WIDTH, score - high_score + SCROLL_THRESH), 3)
+        draw_text('HIGH SCORE', font_small, WHITE, SCREEN_WIDTH - 130, score - high_score + SCROLL_THRESH)
+
+        # draw sprites
+        platform_group.draw(screen)
+        enemy_group.draw(screen)
+        jumpy.draw()
+
+        # draw panel
+        draw_panel()
+
+        # check game over
+        if jumpy.rect.top > SCREEN_HEIGHT:
+            game_over = True
+            death_fx.play()
+        # check for collision with enemies
+        if pygame.sprite.spritecollide(jumpy, enemy_group, False):
+            if pygame.sprite.spritecollide(jumpy, enemy_group, False, pygame.sprite.collide_mask):
+                if display_trivia(screen, pygame.font.Font(None, 36)):
+                    game_over = False  # Reset game_over to False to resume the game
+                    platform = Platform(SCREEN_WIDTH // 2 - 50, SCREEN_HEIGHT - 10, 300, False)
+
+                    platform_group.add(platform)
+                    jumpy.rect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT - 150)  # Reposition jumpy
+                    enemy_group.empty()  # Reset enemies
+                else:
+                    game_over = True  # Game over if the answer is wrong
+
+    else:
+        if fade_counter < SCREEN_WIDTH:
+            fade_counter += 5
+            for y in range(0, 6, 2):
+                pygame.draw.rect(screen, BLACK, (0, y * 100, fade_counter, 100))
+                pygame.draw.rect(screen, BLACK, (SCREEN_WIDTH - fade_counter, (y + 1) * 100, SCREEN_WIDTH, 100))
+        else:
+            draw_text('GAME OVER!', font_big, WHITE, 130, 200)
+            draw_text('SCORE: ' + str(score), font_big, WHITE, 130, 250)
+            draw_text('PRESS SPACE TO PLAY AGAIN', font_big, WHITE, 40, 300)
+            # update high score
+            if score > high_score:
+                high_score = score
+                with open('score.txt', 'w') as file:
+                    file.write(str(high_score))
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_SPACE]:
+                # reset variables
+                game_over = False
+                score = 0
+                scroll = 0
+                fade_counter = 0
+                # reposition jumpy
+                jumpy.rect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT - 150)
+                # reset enemies
+                enemy_group.empty()
+                # reset platforms
+                # platform_group.empty()
+                # create starting platform
+                #create starting platform
+                platform_width = 150  # Adjust this value as needed
+                # platform = Platform(SCREEN_WIDTH // 2 - platform_width // 2, SCREEN_HEIGHT - 100, platform_width, False)
+                platform = Platform(SCREEN_WIDTH // 2 - 50, SCREEN_HEIGHT - 10, 300, False)
+
+                platform_group.add(platform)
+
+                # platform = Platform(SCREEN_WIDTH // 2 - 50, SCREEN_HEIGHT - 100, 100, False)  # Adjust y-position to match player's starting position
+                # platform_group.add(platform)
+                # # platform = Platform(SCREEN_WIDTH // 2 - 50, SCREEN_HEIGHT - 50, 100, False)
+                # # platform_group.add(platform)
+
+    # event handler
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            # update high score
+            if score > high_score:
+                high_score = score
+                with open('score.txt', 'w') as file:
+                    file.write(str(high_score))
+            run = False
+
+    # update display window
+    pygame.display.update()
 
 pygame.quit()
-
